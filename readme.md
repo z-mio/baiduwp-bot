@@ -3,8 +3,8 @@
 
 体验一下：[@getletbot](https://t.me/getletbot)
 
-<细节>
-<摘要><b>功能预览</b></摘要>
+<details>
+<summary><b>功能预览</b></summary>
 
 ![enter description here](https://github.com/z-mio/baiduwp-bot/blob/f56f9b9912227d523942e0c732111759a7c7b7a0/image/1.png)
 
@@ -26,7 +26,7 @@
 
 ![enter description here](https://github.com/z-mio/baiduwp-bot/blob/f56f9b9912227d523942e0c732111759a7c7b7a0/image/8.png)
 
-</细节>
+</details>
 
 
 ## 1.安装
