@@ -8,6 +8,7 @@ import math
 import os
 import re
 from typing import Dict
+
 import requests
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BotCommand
@@ -32,7 +33,7 @@ baidu_password = ''  # 解析密码(不是后台密码)
 # 代理支持“socks4”、“socks5”和“http”
 scheme = ''  # 'http'
 hostname = ''  # '127.0.0.1'
-port = ''  # '7890'
+port = 7890  # 7890
 #########################################
 logging.basicConfig(
     handlers=[
@@ -45,7 +46,7 @@ logging.basicConfig(
 admin = int(admin)
 baidu_url = baidu_url.rstrip('/')
 baidu_password = baidu_password.rstrip('/')
-proxy = {"scheme": scheme, "hostname": hostname, "port": int(port)}
+proxy = {"scheme": scheme, "hostname": hostname, "port": port}
 
 app = Client(
     "my_bot", bot_token=bot_token, api_id=api_id, api_hash=api_hash,
@@ -61,9 +62,9 @@ def add_thread_pool_and_timeout_pause(seconds=30):
         def wrapper(*args, **kw):
             future = thread_pool.submit(asyncio.run, func(*args, **kw))
             return future.result(timeout=seconds)
-
+        
         return wrapper
-
+    
     return decorator
 
 
@@ -77,7 +78,7 @@ def output_error(func):
                 chat_id=message.message.chat.id,
                 message_id=message.message.id,
                 text=f'错误：\n{e}')
-
+    
     return wrapper
 
 
@@ -137,17 +138,17 @@ async def baidu_jx(_, message: Message):
     if not parameter:
         return await message.reply(text)
     msg = await message.reply('解析中...', quote=True)
-
-    def extract_link_and_password(txt: str) -> tuple[str, str]:
+    
+    def extract_link_and_password(txt: str):
         formatted_links = re.search(r'/s/(\S+)', txt)[1].split('?')[0]  # 匹配/s/后面的码
         password_pattern = r"(?<=\bpwd=)[a-zA-Z0-9]+|\b[a-zA-Z0-9]{4}\b(?!\.)"  # 匹配密码
         passwords = re.findall(password_pattern, txt.replace(formatted_links, ''))
         password = passwords[0] if passwords else None
         return formatted_links, password
-
+    
     try:
         surl, pwd = extract_link_and_password(parameter)
-
+        
         root_list = await baidu.get_root_list(surl, pwd)
         if root_list['error']:
             return await msg.edit_text(root_list['msg'])
@@ -165,7 +166,7 @@ async def baidu_list(_, query: CallbackQuery):
     mid = f'{query.message.chat.id}_{query.message.id}'
     rlist = chat_data[f'bd_rlist_{mid}']
     baidu = Baidu(rlist)
-
+    
     num = query.data.split('_')[1]
     surl = rlist['dirdata']['surl']
     pwd = rlist['dirdata']['pwd']
@@ -186,7 +187,7 @@ async def baidu_list(_, query: CallbackQuery):
     else:
         _dir = rlist['filedata'][int(num)]['path']
         dir_list = await baidu.get_list(dir=_dir)
-
+    
     chat_data[f'bd_rlist_{mid}'] = dir_list
     text, button = build_menu(dir_list)
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(button))
@@ -200,7 +201,7 @@ async def baidu_file(_, query: CallbackQuery):
     rlist = chat_data[f'bd_rlist_{mid}']
     num = query.data.split('_')[1]
     fs_id = rlist['filedata'][int(num)]['fs_id']
-
+    
     baidu = Baidu(rlist)
     dir_list = await baidu.get_dlurl(fs_id=fs_id)
     text = f"""
@@ -235,7 +236,7 @@ async def baidu_all_dl(_, query: CallbackQuery):
     rlist = chat_data[f'bd_rlist_{mid}']
     baidu = Baidu(rlist)
     fetch_failed = []
-
+    
     async def add_dl(v):
         try:
             fs_id = v['fs_id']
@@ -244,14 +245,14 @@ async def baidu_all_dl(_, query: CallbackQuery):
         except Exception as ee:
             logging.error(ee)
             fetch_failed.append(v['name'])
-
+    
     dirname = rlist['dirdata']['src'][-1]['dirname']
     await query.message.edit_text(f'{dirname}|获取中...')
     a = [v for v in rlist['filedata'] if not v['isdir']]
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [executor.submit(asyncio.run, add_dl(v)) for v in a]
     results = [future.result() for future in concurrent.futures.wait(futures).done]
-
+    
     button = [
         [
             InlineKeyboardButton('📖查看下载教程', url='https://telegra.ph/%E4%B8%8B%E8%BD%BD%E6%8F%90%E7%A4%BA-07-13')
@@ -261,7 +262,7 @@ async def baidu_all_dl(_, query: CallbackQuery):
             InlineKeyboardButton('❌关闭菜单', callback_data='bdexit')
         ]
     ]
-
+    
     t = [f"➡️{v[0]}\n{v[1]}" for v in results]
     u = '\n'.join([n[1] for n in results])
     text = f'\n\n{("=" * 40)}\n\n'.join(t)
@@ -332,19 +333,19 @@ class Baidu:
             self.surl = page_results['dirdata']['surl']
             self.pwd = page_results['dirdata']['pwd']
             self.uk = page_results['dirdata']['uk']
-
+    
     # 获取解析统计
     async def parse_count(self) -> str:
         result = requests.get(f'{baidu_url}/api.php?m=ParseCount').json()
         result = result['msg'].replace('<br />', '\n')
         return result
-
+    
     # 获取上次解析数据
     async def last_parse(self) -> str:
         result = requests.get(f'{baidu_url}/api.php?m=LastParse').json()
         result = result['msg'].replace('<br />', '\n')
         return result
-
+    
     # 解析链接根目录
     async def get_root_list(
             self,
@@ -362,9 +363,9 @@ class Baidu:
             'pwd': pwd,
             'password': password,
         }
-
+        
         return requests.post(f'{baidu_url}/api.php?m=GetList', data=data).json()
-
+    
     # 解析链接文件夹
     async def get_list(
             self,
@@ -376,7 +377,7 @@ class Baidu:
         :param dir:
         :param password:
         """
-
+        
         data = {
             'dir': dir,
             'timestamp': self.timestamp,
@@ -391,7 +392,7 @@ class Baidu:
         result['filedata'] = sorted(sorted(result['filedata'], key=lambda x: x['name']), key=lambda x: x['isdir'],
                                     reverse=True)
         return result
-
+    
     # 获取下载地址
     async def get_dlurl(
             self,
@@ -414,7 +415,7 @@ class Baidu:
             'uk': self.uk,
             'password': password,
         }
-
+        
         return requests.post(f'{baidu_url}/api.php?m=Download', data=data).json()
 
 
