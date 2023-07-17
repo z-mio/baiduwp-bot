@@ -119,7 +119,7 @@ def build_menu(root_list):
 @app.on_message(filters.command('bd'))
 @add_thread_pool_and_timeout_pause()
 async def baidu_jx(_, message: Message):
-    if message.chat.id not in members or message.chat.id != admin:
+    if message.chat.id not in members and message.chat.id != admin:
         return
     mid = f'{message.chat.id}_{message.id + 1}'
     parameter = ' '.join(message.command[1:])
