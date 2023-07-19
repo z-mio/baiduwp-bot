@@ -246,7 +246,7 @@ async def baidu_all_dl(_, query: CallbackQuery):
             logging.error(ee)
             fetch_failed.append(v['name'])
     
-    dirname = rlist['dirdata']['src'][-1]['dirname']
+    dirname = rlist['dirdata']['src'][-1]['dirname'] if rlist['dirdata']['src'] else '根目录'
     await query.message.edit_text(f'{dirname}|获取中...')
     a = [v for v in rlist['filedata'] if not v['isdir']]
     with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -266,7 +266,7 @@ async def baidu_all_dl(_, query: CallbackQuery):
     t = [f"➡️{v[0]}\n{v[1]}" for v in results]
     u = '\n'.join([n[1] for n in results])
     text = f'\n\n{("=" * 40)}\n\n'.join(t)
-    text = f"""路径：{rlist['dirdata']['src'][-1]['fullsrc']}
+    text = f"""路径：{rlist['dirdata']['src'][-1]['fullsrc'] if rlist['dirdata']['src'] else '根目录'}
 上部分为单个链接
 下部分为全部链接
 
