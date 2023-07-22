@@ -22,7 +22,7 @@ api_hash = ''  # 在 https://my.telegram.org/apps 获取
 
 bot_token = ''  # 在 https://t.me/BotFather 获取
 
-members = [123456789, 987654321]  # 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/get_id_bot 获取id
+members = [123456789, 987654321]  # 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/getletbot 获取id
 
 baidu_url = ''  # 你的百度解析地址
 
