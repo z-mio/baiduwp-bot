@@ -1,3 +1,3 @@
 Pyrogram
 TgCrypto
-requests
+httpx

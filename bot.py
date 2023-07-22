@@ -9,9 +9,9 @@ import os
 import re
 from typing import Dict
 
-import requests
+import httpx
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BotCommand
+from pyrogram.types import BotCommand, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 #########################################
 # bot
@@ -22,9 +22,7 @@ api_hash = ''  # 在 https://my.telegram.org/apps 获取
 
 bot_token = ''  # 在 https://t.me/BotFather 获取
 
-admin = '123456789'  # 管理员用户id,可通过 https://t.me/get_id_bot 获取id
-
-members = [123456789, 987654321]  # 允许使用解析的 用户、群组、频道 id获取方式同上（群组和频道id需要加上-100）
+members = [123456789, 987654321]  # 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/get_id_bot 获取id
 
 baidu_url = ''  # 你的百度解析地址
 
@@ -43,7 +41,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s: %(message)s',
     level=logging.ERROR
 )
-admin = int(admin)
+
 baidu_url = baidu_url.rstrip('/')
 baidu_password = baidu_password.rstrip('/')
 proxy = {"scheme": scheme, "hostname": hostname, "port": port}
@@ -53,41 +51,29 @@ app = Client(
     proxy=proxy if all([scheme, hostname, port]) else None,
 )
 
-thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=100)
 
-
-def add_thread_pool_and_timeout_pause(seconds=30):
+def output_error():
     def decorator(func):
         @functools.wraps(func)
-        def wrapper(*args, **kw):
-            future = thread_pool.submit(asyncio.run, func(*args, **kw))
-            return future.result(timeout=seconds)
+        async def wrapper(client, message: Message, *args, **kw):
+            try:
+                return await func(client, message, *args, **kw)
+            except Exception as e:
+                logging.error(
+                    f"错误:聊天id：{message.chat.id}-用户id：{message.from_user.id}-用户名：@{message.from_user.username}-用户昵称：{message.from_user.first_name}-{e}")
+                m = message.message if isinstance(message, CallbackQuery) else message
+                return await m.reply(f"错误:{e}")
         
         return wrapper
     
     return decorator
 
 
-def output_error(func):
-    async def wrapper(client, message, *args, **kwargs):
-        try:
-            await func(client, message, *args, **kwargs)
-        except Exception as e:
-            logging.info(e)
-            await message.edit_message_text(
-                chat_id=message.message.chat.id,
-                message_id=message.message.id,
-                text=f'错误：\n{e}')
-    
-    return wrapper
-
-
 # 设置菜单
 @app.on_message(filters.command('menu') & filters.private)
 async def menu(_, message: Message):
-    if message.chat.id == admin:
-        await app.set_bot_commands([BotCommand(command="bd", description="百度网盘解析")])
-        await app.send_message(chat_id=message.chat.id, text="菜单设置成功，请退出聊天界面重新进入来刷新菜单")
+    await app.set_bot_commands([BotCommand(command="bd", description="百度网盘解析")])
+    await app.send_message(chat_id=message.chat.id, text="菜单设置成功，请退出聊天界面重新进入来刷新菜单")
 
 
 # 构建菜单
@@ -117,9 +103,8 @@ def build_menu(root_list):
 
 
 @app.on_message(filters.command('bd'))
-@add_thread_pool_and_timeout_pause()
 async def baidu_jx(_, message: Message):
-    if message.chat.id not in members and message.chat.id != admin:
+    if message.chat.id not in members:
         return
     mid = f'{message.chat.id}_{message.id + 1}'
     parameter = ' '.join(message.command[1:])
@@ -160,8 +145,7 @@ async def baidu_jx(_, message: Message):
 
 
 @app.on_callback_query(filters.regex(r'^bd_'))
-@add_thread_pool_and_timeout_pause()
-@output_error
+@output_error()
 async def baidu_list(_, query: CallbackQuery):
     mid = f'{query.message.chat.id}_{query.message.id}'
     rlist = chat_data[f'bd_rlist_{mid}']
@@ -194,8 +178,7 @@ async def baidu_list(_, query: CallbackQuery):
 
 
 @app.on_callback_query(filters.regex(r'^bdf_'))
-@add_thread_pool_and_timeout_pause()
-@output_error
+@output_error()
 async def baidu_file(_, query: CallbackQuery):
     mid = f'{query.message.chat.id}_{query.message.id}'
     rlist = chat_data[f'bd_rlist_{mid}']
@@ -229,8 +212,7 @@ User-Agent：`{dir_list['user_agent']}`
 
 
 @app.on_callback_query(filters.regex(r'^bdAll_dl'))
-@add_thread_pool_and_timeout_pause()
-@output_error
+@output_error()
 async def baidu_all_dl(_, query: CallbackQuery):
     mid = f'{query.message.chat.id}_{query.message.id}'
     rlist = chat_data[f'bd_rlist_{mid}']
@@ -246,7 +228,7 @@ async def baidu_all_dl(_, query: CallbackQuery):
             logging.error(ee)
             fetch_failed.append(v['name'])
     
-    dirname = rlist['dirdata']['src'][-1]['dirname'] if rlist['dirdata']['src'] else '根目录'
+    dirname = rlist['dirdata']['src'][-1]['dirname']
     await query.message.edit_text(f'{dirname}|获取中...')
     a = [v for v in rlist['filedata'] if not v['isdir']]
     with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -266,7 +248,7 @@ async def baidu_all_dl(_, query: CallbackQuery):
     t = [f"➡️{v[0]}\n{v[1]}" for v in results]
     u = '\n'.join([n[1] for n in results])
     text = f'\n\n{("=" * 40)}\n\n'.join(t)
-    text = f"""路径：{rlist['dirdata']['src'][-1]['fullsrc'] if rlist['dirdata']['src'] else '根目录'}
+    text = f"""路径：{rlist['dirdata']['src'][-1]['fullsrc']}
 上部分为单个链接
 下部分为全部链接
 
@@ -336,15 +318,17 @@ class Baidu:
     
     # 获取解析统计
     async def parse_count(self) -> str:
-        result = requests.get(f'{baidu_url}/api.php?m=ParseCount').json()
-        result = result['msg'].replace('<br />', '\n')
-        return result
+        async with httpx.AsyncClient() as client:
+            result = await client.get(f'{baidu_url}/api.php?m=ParseCount')
+            result = result.json()['msg'].replace('<br />', '\n')
+            return result
     
     # 获取上次解析数据
     async def last_parse(self) -> str:
-        result = requests.get(f'{baidu_url}/api.php?m=LastParse').json()
-        result = result['msg'].replace('<br />', '\n')
-        return result
+        async with httpx.AsyncClient() as client:
+            result = await client.get(f'{baidu_url}/api.php?m=LastParse')
+            result = result.json()['msg'].replace('<br />', '\n')
+            return result
     
     # 解析链接根目录
     async def get_root_list(
@@ -354,9 +338,39 @@ class Baidu:
             password: str = baidu_password
     ) -> Dict:
         """
+
         :param surl:
         :param pwd:
         :param password:
+        :return:
+        {
+            "error": 0,
+            "isroot": true,
+            "dirdata": {
+                "src": [
+                    "string"
+                ],
+                "timestamp": "string",
+                "sign": "string",
+                "randsk": "string",
+                "shareid": "string",
+                "surl": "string",
+                "pwd": "string",
+                "uk": "string"
+            },
+            "filenum": 0,
+            "filedata": [
+                {
+                    "isdir": 0,
+                    "name": "string",
+                    "fs_id": "string",
+                    "path": "string",
+                    "size": 0,
+                    "uploadtime": 0,
+                    "dlink": "string"
+                }
+            ]
+        }
         """
         data = {
             'surl': surl,
@@ -364,7 +378,9 @@ class Baidu:
             'password': password,
         }
         
-        return requests.post(f'{baidu_url}/api.php?m=GetList', data=data).json()
+        async with httpx.AsyncClient() as client:
+            result = await client.post(f'{baidu_url}/api.php?m=GetList', data=data)
+        return result.json()
     
     # 解析链接文件夹
     async def get_list(
@@ -376,6 +392,35 @@ class Baidu:
 
         :param dir:
         :param password:
+        :return:
+        {
+      "error": 0,
+      "isroot": true,
+      "dirdata": {
+        "src": [
+          {}
+        ],
+        "timestamp": "string",
+        "sign": "string",
+        "randsk": "string",
+        "shareid": "string",
+        "surl": "string",
+        "pwd": "string",
+        "uk": "string"
+      },
+      "filenum": 0,
+      "filedata": [
+        {
+          "isdir": 0,
+          "name": "string",
+          "fs_id": "string",
+          "path": "string",
+          "size": 0,
+          "uploadtime": 0,
+          "dlink": "string"
+        }
+      ]
+    }
         """
         
         data = {
@@ -388,9 +433,13 @@ class Baidu:
             'pwd': self.pwd,
             'uk': self.uk, 'password': password,
         }
-        result = requests.post(f'{baidu_url}/api.php?m=GetList', data=data).json()
-        result['filedata'] = sorted(sorted(result['filedata'], key=lambda x: x['name']), key=lambda x: x['isdir'],
-                                    reverse=True)
+        async with httpx.AsyncClient() as client:
+            result = await client.post(f'{baidu_url}/api.php?m=GetList', data=data)
+            result = result.json()
+            # 对文件重新排序
+            result['filedata'] = sorted(sorted(result['filedata'], key=lambda x: x['name']),
+                                        key=lambda x: x['isdir'],
+                                        reverse=True)
         return result
     
     # 获取下载地址
@@ -403,6 +452,24 @@ class Baidu:
 
         :param fs_id:
         :param password:
+        :return:
+        {
+  "error": 0,
+  "msg": "string",
+  "title": "string",
+  "filedata": {
+    "filename": "string",
+    "size": "string",
+    "path": "string",
+    "uploadtime": 0,
+    "md5": "string"
+  },
+  "directlink": "string",
+  "user_agent": "string",
+  "message": [
+    "string"
+  ]
+}
         """
         data = {
             'fs_id': fs_id,
@@ -415,8 +482,9 @@ class Baidu:
             'uk': self.uk,
             'password': password,
         }
-        
-        return requests.post(f'{baidu_url}/api.php?m=Download', data=data).json()
+        async with httpx.AsyncClient() as client:
+            result = await client.post(f'{baidu_url}/api.php?m=Download', data=data)
+        return result.json()
 
 
 if __name__ == '__main__':
