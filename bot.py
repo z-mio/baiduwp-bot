@@ -2,7 +2,6 @@
 import asyncio
 import concurrent.futures
 import datetime
-import functools
 import logging
 import math
 import os
@@ -52,23 +51,6 @@ app = Client(
 )
 
 
-def output_error():
-    def decorator(func):
-        @functools.wraps(func)
-        async def wrapper(client, message: Message, *args, **kw):
-            try:
-                return await func(client, message, *args, **kw)
-            except Exception as e:
-                logging.error(
-                    f"错误:聊天id：{message.chat.id}-用户id：{message.from_user.id}-用户名：@{message.from_user.username}-用户昵称：{message.from_user.first_name}-{e}")
-                m = message.message if isinstance(message, CallbackQuery) else message
-                return await m.reply(f"错误:{e}")
-        
-        return wrapper
-    
-    return decorator
-
-
 # 设置菜单
 @app.on_message(filters.command('menu') & filters.private)
 async def menu(_, message: Message):
@@ -87,25 +69,31 @@ def build_menu(root_list):
             callback_data=f'bd_{i}' if v['isdir'] else f"bdf_{i}"
         )] for i, v in enumerate(root_list['filedata'])
     ]
-    but = [
-        InlineKeyboardButton('🔙返回上级', callback_data='bd_rt'),
-        InlineKeyboardButton('❌关闭菜单', callback_data='bdexit')
-    ]
-    but_all_dl = [
-        InlineKeyboardButton('🌐获取本页所有文件下载链接', callback_data='bdAll_dl')
-    ]
+    but = [InlineKeyboardButton(
+        text='🔙返回上级',
+        callback_data='bd_rt'
+    ), InlineKeyboardButton(
+        text='❌关闭菜单',
+        callback_data='bdexit'
+    )]
+    but_1 = [InlineKeyboardButton(
+        text='🌐获取本页所有文件下载链接',
+        callback_data='bdAll_dl'
+    ), ]
     if [v for v in root_list['filedata'] if not v['isdir']]:
-        button.insert(0, but_all_dl)
+        button.insert(0, but_1)
+        if root_list['filedata'][7:]:
+            button.append(but_1)
+    
     button.insert(0, but)
     if root_list['filedata'][7:]:
         button.append(but)
+    
     return text, button
 
 
 @app.on_message(filters.command('bd'))
 async def baidu_jx(_, message: Message):
-    if message.chat.id not in members:
-        return
     mid = f'{message.chat.id}_{message.id + 1}'
     parameter = ' '.join(message.command[1:])
     parameter = parameter or (message.reply_to_message.text if message.reply_to_message else None)
@@ -124,16 +112,15 @@ async def baidu_jx(_, message: Message):
         return await message.reply(text)
     msg = await message.reply('解析中...', quote=True)
     
-    def extract_link_and_password(txt: str):
-        formatted_links = re.search(r'/s/(\S+)', txt)[1].split('?')[0]  # 匹配/s/后面的码
-        password_pattern = r"(?<=\bpwd=)[a-zA-Z0-9]+|\b[a-zA-Z0-9]{4}\b(?!\.)"  # 匹配密码
-        passwords = re.findall(password_pattern, txt.replace(formatted_links, ''))
+    def extract_link_and_password(_text: str) -> tuple[str, str]:
+        formatted_links = re.search(r'(?:/s/|surl=)([\w-]+)', _text)[1]  # 匹配/s/后面的码
+        password_pattern = r"(?<=\bpwd=)[a-zA-Z0-9]+|(\b[a-zA-Z0-9]{4}\b(?!\.))(?<!link)(?<!https)(?<!surl)"  # 匹配密码
+        passwords = re.search(password_pattern, _text.replace(formatted_links, ''))
         password = passwords[0] if passwords else None
         return formatted_links, password
     
     try:
         surl, pwd = extract_link_and_password(parameter)
-        
         root_list = await baidu.get_root_list(surl, pwd)
         if root_list['error']:
             return await msg.edit_text(root_list['msg'])
@@ -145,7 +132,6 @@ async def baidu_jx(_, message: Message):
 
 
 @app.on_callback_query(filters.regex(r'^bd_'))
-@output_error()
 async def baidu_list(_, query: CallbackQuery):
     mid = f'{query.message.chat.id}_{query.message.id}'
     rlist = chat_data[f'bd_rlist_{mid}']
@@ -178,7 +164,6 @@ async def baidu_list(_, query: CallbackQuery):
 
 
 @app.on_callback_query(filters.regex(r'^bdf_'))
-@output_error()
 async def baidu_file(_, query: CallbackQuery):
     mid = f'{query.message.chat.id}_{query.message.id}'
     rlist = chat_data[f'bd_rlist_{mid}']
@@ -212,7 +197,6 @@ User-Agent：`{dir_list['user_agent']}`
 
 
 @app.on_callback_query(filters.regex(r'^bdAll_dl'))
-@output_error()
 async def baidu_all_dl(_, query: CallbackQuery):
     mid = f'{query.message.chat.id}_{query.message.id}'
     rlist = chat_data[f'bd_rlist_{mid}']
@@ -228,10 +212,10 @@ async def baidu_all_dl(_, query: CallbackQuery):
             logging.error(ee)
             fetch_failed.append(v['name'])
     
-    dirname = rlist['dirdata']['src'][-1]['dirname']
+    dirname = rlist['dirdata']['src'][-1]['dirname'] if rlist['dirdata']['src'] else '根目录'
     await query.message.edit_text(f'{dirname}|获取中...')
     a = [v for v in rlist['filedata'] if not v['isdir']]
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = [executor.submit(asyncio.run, add_dl(v)) for v in a]
     results = [future.result() for future in concurrent.futures.wait(futures).done]
     
@@ -244,11 +228,10 @@ async def baidu_all_dl(_, query: CallbackQuery):
             InlineKeyboardButton('❌关闭菜单', callback_data='bdexit')
         ]
     ]
-    
-    t = [f"➡️{v[0]}\n{v[1]}" for v in results]
-    u = '\n'.join([n[1] for n in results])
+    t = [f"➡️{v[0]}\n{v[1]}" for v in results if v]
+    u = '\n'.join([n[1] for n in results if n])
     text = f'\n\n{("=" * 40)}\n\n'.join(t)
-    text = f"""路径：{rlist['dirdata']['src'][-1]['fullsrc']}
+    text = f"""路径：{rlist['dirdata']['src'][-1]['fullsrc'] if rlist['dirdata']['src'] else '根目录'}
 上部分为单个链接
 下部分为全部链接
 
@@ -268,7 +251,7 @@ async def baidu_all_dl(_, query: CallbackQuery):
         f.write(text)
     e = '\n'.join(fetch_failed)
     msg = await query.message.reply_document(document=path, reply_markup=InlineKeyboardMarkup(button),
-                                             caption=f"获取失败：\n{e}" if fetch_failed else '',
+                                             caption=f"**获取失败：**\n{e}" if fetch_failed else '',
                                              reply_to_message_id=query.message.id - 1)
     await query.message.delete()
     chat_data[f'bd_rlist_{msg.chat.id}_{msg.id}'] = chat_data[f'bd_rlist_{mid}']
@@ -317,22 +300,24 @@ class Baidu:
             self.uk = page_results['dirdata']['uk']
     
     # 获取解析统计
-    async def parse_count(self) -> str:
+    @staticmethod
+    async def parse_count() -> str:
         async with httpx.AsyncClient() as client:
             result = await client.get(f'{baidu_url}/api.php?m=ParseCount')
             result = result.json()['msg'].replace('<br />', '\n')
             return result
     
     # 获取上次解析数据
-    async def last_parse(self) -> str:
+    @staticmethod
+    async def last_parse() -> str:
         async with httpx.AsyncClient() as client:
             result = await client.get(f'{baidu_url}/api.php?m=LastParse')
             result = result.json()['msg'].replace('<br />', '\n')
             return result
     
     # 解析链接根目录
+    @staticmethod
     async def get_root_list(
-            self,
             surl: str,
             pwd: str,
             password: str = baidu_password
