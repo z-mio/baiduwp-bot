@@ -94,6 +94,8 @@ def build_menu(root_list):
 
 @app.on_message(filters.command('bd'))
 async def baidu_jx(_, message: Message):
+    if message.chat.id not in members:
+        return
     mid = f'{message.chat.id}_{message.id + 1}'
     parameter = ' '.join(message.command[1:])
     parameter = parameter or (message.reply_to_message.text if message.reply_to_message else None)
