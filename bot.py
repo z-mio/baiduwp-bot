@@ -96,7 +96,7 @@ def build_menu(root_list):
 async def baidu_jx(_, message: Message):
     if message.chat.id not in members:
         return
-    mid = f'{message.chat.id}_{message.id + 1}'
+    mid = f'{message.from_user.id}_{message.id + 1}'
     parameter = ' '.join(message.command[1:])
     parameter = parameter or (message.reply_to_message.text if message.reply_to_message else None)
     baidu = Baidu()
@@ -135,8 +135,10 @@ async def baidu_jx(_, message: Message):
 
 @app.on_callback_query(filters.regex(r'^bd_'))
 async def baidu_list(_, query: CallbackQuery):
-    mid = f'{query.message.chat.id}_{query.message.id}'
-    rlist = chat_data[f'bd_rlist_{mid}']
+    mid = f'{query.from_user.id}_{query.message.id}'
+    rlist = chat_data.get(f'bd_rlist_{mid}')
+    if not rlist:
+        return
     baidu = Baidu(rlist)
     
     num = query.data.split('_')[1]
@@ -167,8 +169,10 @@ async def baidu_list(_, query: CallbackQuery):
 
 @app.on_callback_query(filters.regex(r'^bdf_'))
 async def baidu_file(_, query: CallbackQuery):
-    mid = f'{query.message.chat.id}_{query.message.id}'
-    rlist = chat_data[f'bd_rlist_{mid}']
+    mid = f'{query.from_user.id}_{query.message.id}'
+    rlist = chat_data.get(f'bd_rlist_{mid}')
+    if not rlist:
+        return
     num = query.data.split('_')[1]
     fs_id = rlist['filedata'][int(num)]['fs_id']
     
@@ -200,8 +204,10 @@ User-Agent：`{dir_list['user_agent']}`
 
 @app.on_callback_query(filters.regex(r'^bdAll_dl'))
 async def baidu_all_dl(_, query: CallbackQuery):
-    mid = f'{query.message.chat.id}_{query.message.id}'
-    rlist = chat_data[f'bd_rlist_{mid}']
+    mid = f'{query.from_user.id}_{query.message.id}'
+    rlist = chat_data.get(f'bd_rlist_{mid}')
+    if not rlist:
+        return
     baidu = Baidu(rlist)
     fetch_failed = []
     
@@ -263,7 +269,11 @@ async def baidu_all_dl(_, query: CallbackQuery):
 
 @app.on_callback_query(filters.regex(r'^bdexit'))
 async def baidu_exit(_, query: CallbackQuery):
-    await query.message.edit_text('已退出『百度解析』')
+    mid = f'{query.from_user.id}_{query.message.id}'
+    if chat_data.get(f'bd_rlist_{mid}'):
+        await query.message.edit_text('已退出『百度解析』')
+    else:
+        return
 
 
 ###########################################################################
