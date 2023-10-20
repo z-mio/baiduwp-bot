@@ -100,8 +100,8 @@ async def baidu_jx(_, message: Message):
     parameter = ' '.join(message.command[1:])
     parameter = parameter or (message.reply_to_message.text if message.reply_to_message else None)
     baidu = Baidu()
-    parse_count = await baidu.parse_count()
-    last_parse = await baidu.last_parse()
+    parse_count,last_parse = await baidu.parse_count()
+    #last_parse = await baidu.last_parse()
     text = f"""
 {parse_count}
 
@@ -315,10 +315,16 @@ class Baidu:
     @staticmethod
     async def parse_count() -> str:
         async with httpx.AsyncClient() as client:
-            result = await client.get(f'{baidu_url}/api.php?m=ParseCount')
-            result = result.json()['msg'].replace('<br />', '\n')
-            return result
-    
+            result = await client.get(f'{baidu_url}/system')
+            count = result.json()['count']
+            last = result.json()['account']
+            last_flag = '已被限速' if  last.get('limit') else "状态正常"
+            parse_count = "系统使用统计\n累计解析: "+str(count['all']['times'])+" ("+str(pybyte(count['all']['flow']))+ \
+            ")\n今日解析: "+str(count['today']['times'])+" ("+str(pybyte(count['today']['flow']))+")"
+            last_parse = "SVIP账号状态\n上次解析: "+str(last['last_time'])+"\n账号状态: "+last_flag
+            return parse_count ,last_parse
+
+    '''
     # 获取上次解析数据
     @staticmethod
     async def last_parse() -> str:
@@ -326,7 +332,7 @@ class Baidu:
             result = await client.get(f'{baidu_url}/api.php?m=LastParse')
             result = result.json()['msg'].replace('<br />', '\n')
             return result
-    
+    '''
     # 解析链接根目录
     @staticmethod
     async def get_root_list(
@@ -376,7 +382,7 @@ class Baidu:
         }
         
         async with httpx.AsyncClient() as client:
-            result = await client.post(f'{baidu_url}/api.php?m=GetList', data=data)
+            result = await client.post(f'{baidu_url}/parse/list', data=data)
         return result.json()
     
     # 解析链接文件夹
@@ -431,7 +437,7 @@ class Baidu:
             'uk': self.uk, 'password': password,
         }
         async with httpx.AsyncClient() as client:
-            result = await client.post(f'{baidu_url}/api.php?m=GetList', data=data)
+            result = await client.post(f'{baidu_url}/parse/list', data=data)
             result = result.json()
             # 对文件重新排序
             result['filedata'] = sorted(sorted(result['filedata'], key=lambda x: x['name']),
@@ -480,7 +486,7 @@ class Baidu:
             'password': password,
         }
         async with httpx.AsyncClient() as client:
-            result = await client.post(f'{baidu_url}/api.php?m=Download', data=data)
+            result = await client.post(f'{baidu_url}/parse/link', data=data)
         return result.json()
 
 
