@@ -108,17 +108,18 @@ async def baidu_jx(_, message: Message):
 {last_parse}
 
 请加上分享链接，链接格式随意，例：
-`/bd 链接: https://pan.baidu.com/s/1w9GGad_-wkipeRVtnxdZiQ?pwd=qysn 提取码: qysn 复制这段内容后打开百度网盘手机App，操作更方便哦`
+`/bd 链接: https://pan.baidu.com/s/1uY-UL9KN9cwKiTX5TzIEuw?pwd=jwdp 提取码: jwdp 复制这段内容后打开百度网盘手机App，操作更方便哦`
 """
     if not parameter:
         return await message.reply(text)
     msg = await message.reply('解析中...', quote=True)
-    
+
     def extract_link_and_password(_text: str) -> tuple[str, str]:
         formatted_links = re.search(r'(?:/s/|surl=)([\w-]+)', _text)[1]  # 匹配/s/后面的码
-        password_pattern = r"(?<=\bpwd=)[a-zA-Z0-9]+|(\b[a-zA-Z0-9]{4}\b(?!\.))(?<!link)(?<!https)(?<!surl)"  # 匹配密码
+        formatted_links = formatted_links if formatted_links.startswith('1') else f'1{formatted_links}'
+        password_pattern = r"(?<=\bpwd=)[a-zA-Z0-9]+|[^/](\b[a-zA-Z0-9]{4}\b(?!\.))(?<!link)(?<!https)(?<!surl)"  # 匹配密码
         passwords = re.search(password_pattern, _text.replace(formatted_links, ''))
-        password = passwords[0] if passwords else None
+        password = passwords[1] if passwords else None
         return formatted_links, password
     
     try:
