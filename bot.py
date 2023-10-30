@@ -96,7 +96,6 @@ def build_menu(root_list):
 async def baidu_jx(_, message: Message):
     if message.chat.id not in members:
         return
-    mid = f'{message.from_user.id}_{message.id + 1}'
     parameter = ' '.join(message.command[1:])
     parameter = parameter or (message.reply_to_message.text if message.reply_to_message else None)
     baidu = Baidu()
@@ -113,7 +112,7 @@ async def baidu_jx(_, message: Message):
     if not parameter:
         return await message.reply(text)
     msg = await message.reply('解析中...', quote=True)
-
+    mid = f'{message.from_user.id}_{msg.id}'
     def extract_link_and_password(_text: str) -> tuple[str, str]:
         formatted_links = re.search(r'(?:/s/|surl=)([\w-]+)', _text)[1]  # 匹配/s/后面的码
         formatted_links = formatted_links if formatted_links.startswith('1') else f'1{formatted_links}'
