@@ -1,5 +1,5 @@
 # baiduwp-bot
-一个基于baiduwp-php API的百度网盘解析bot
+一个基于[baiduwp-php](https://github.com/yuantuo666/baiduwp-php) API的百度网盘解析bot
 
 体验一下：[@getletbot](https://t.me/getletbot)
 
