@@ -510,8 +510,8 @@ class Baidu:
             system = await self.get_system()
             return f"""
 系统使用统计
-累计解析: {system.all_times} ({system.all_flow})
-今日解析: {system.today_times} ({system.today_flow})
+累计解析: {system.all_times} ({pybyte(system.all_flow)})
+今日解析: {system.today_times} ({pybyte(system.today_flow)})
 
 SVIP账号状态
 上次解析: {system.last_time}
