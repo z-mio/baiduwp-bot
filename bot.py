@@ -51,7 +51,7 @@ logging.basicConfig(
 baidu_url, baidu_password = baidu_url.rstrip('/'), baidu_password.rstrip('/')
 proxies = {
     "all://": f"{scheme}://{hostname}:{port}",
-}
+} if all([scheme, hostname, port]) else None
 app = Client(
     "my_bot", bot_token=bot_token, api_id=api_id, api_hash=api_hash,
     proxy={"scheme": scheme, "hostname": hostname, "port": port} if all([scheme, hostname, port]) else None,
