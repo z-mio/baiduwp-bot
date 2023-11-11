@@ -119,18 +119,18 @@ class ParseList:
 
     @staticmethod
     def parse_filedata(filedata_list):
-        filedata_parsed = []
-        for filedata in filedata_list:
-            filedata_parsed.append({
+        return [
+            {
                 'isdir': filedata.get('isdir', 0),
                 'name': filedata.get('name', ''),
                 'fs_id': filedata.get('fs_id', ''),
                 'path': filedata.get('path', ''),
                 'size': filedata.get('size', 0),
                 'uploadtime': filedata.get('uploadtime', 0),
-                'dlink': filedata.get('dlink', '')
-            })
-        return filedata_parsed
+                'dlink': filedata.get('dlink', ''),
+            }
+            for filedata in filedata_list
+        ]
 
 
 # 构建菜单
@@ -260,9 +260,8 @@ async def preloading(rlist, dir_list: ParseList, mid):
 
     d_l = [i.path for i in dir_list.filedata if i.isdir and not chat_data.get(f'bd_rlist_{mid}_{md5_hash(i.path)}')]
     if not d_l[20:]:
-        a = [v for v in d_l]
         with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
-            futures = [executor.submit(asyncio.run, load(v)) for v in a]
+            futures = [executor.submit(asyncio.run, load(v)) for v in d_l]
         [future.result() for future in concurrent.futures.wait(futures).done]
 
 
