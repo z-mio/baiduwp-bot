@@ -50,17 +50,17 @@ git clone https://github.com/z-mio/baiduwp-bot.git && cd baiduwp-bot && pip3 ins
 #########################################
 # bot
 
-api_id = ''  # 在 https://my.telegram.org/apps 获取
+api_id = '123456'  # 在 https://my.telegram.org/apps 获取
 
-api_hash = ''  # 在 https://my.telegram.org/apps 获取
+api_hash = '6f51a2b93a159b8f8ca07dafed4a776c'  # 在 https://my.telegram.org/apps 获取
 
-bot_token = ''  # 在 https://t.me/BotFather 获取
+bot_token = '6980461837:AAH2-gGWToP_7hcyhzKbbq04NZYW7YE4i6B'  # 在 https://t.me/BotFather 获取
 
-admin = '123456789'  # 管理员用户id,可通过 https://t.me/get_id_bot 获取id
+members = [1447511233, -100123456789]  # 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/getletbot 获取id
 
-members = [123456789, 987654321]  # 允许使用解析的 用户、群组、频道 id获取方式同上（群组和频道id需要加上-100）
+baidu_version: Literal['3', '4'] = '4'  # 你部署的baiduwp-php版本
 
-baidu_url = ''  # 你的百度解析地址
+baidu_url = 'https://'  # 你的百度解析地址
 
 baidu_password = ''  # 解析密码(不是后台密码)
 #########################################
