@@ -9,7 +9,7 @@ import math
 import os
 import re
 from dataclasses import dataclass
-from typing import Literal, List
+from typing import List
 
 import httpx
 from pyrogram import Client, filters
@@ -26,7 +26,7 @@ bot_token = '6980461837:AAH2-gGWToP_7hcyhzKbbq04NZYW7YE4i6B'  # 在 https://t.me
 
 members = [1447511233, -100123456789]  # 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/getletbot 获取id
 
-baidu_version: Literal['3', '4'] = '4'  # 你部署的baiduwp-php版本
+baidu_version = '4'  # 你部署的baiduwp-php版本，填 3 或 4
 
 baidu_url = 'https://'  # 你的百度解析地址
 
