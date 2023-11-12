@@ -9,7 +9,7 @@ import math
 import os
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Tuple
 
 import httpx
 from pyrogram import Client, filters
@@ -18,13 +18,13 @@ from pyrogram.types import BotCommand, CallbackQuery, InlineKeyboardButton, Inli
 #########################################
 # bot
 
-api_id = '123456'  # 在 https://my.telegram.org/apps 获取
+api_id = '18156128'  # 在 https://my.telegram.org/apps 获取
 
-api_hash = '6f51a2b93a159b8f8ca07dafed4a776c'  # 在 https://my.telegram.org/apps 获取
+api_hash = '63a159baff516c8f8a2b9ed4a77ca07d'  # 在 https://my.telegram.org/apps 获取
 
-bot_token = '6980461837:AAH2-gGWToP_7hcyhzKbbq04NZYW7YE4i6B'  # 在 https://t.me/BotFather 获取
+bot_token = '6108379846:AAH2-gYW7YE04_74NhzKbbqZyi6BhcGWToP'  # 在 https://t.me/BotFather 获取
 
-members = [1447511233, -100123456789]  # 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/getletbot 获取id
+members = [1143744753, -102301456789]  # 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/getletbot 获取id
 
 baidu_version = '4'  # 你部署的baiduwp-php版本，填 3 或 4
 
@@ -178,15 +178,15 @@ async def baidu_jx(_, message: Message):
     if not parameter:
         system = await baidu.system_text()
         text = f"""
-        {system}
-        请加上分享链接，链接格式随意，例：
-        `/bd 链接: https://pan.baidu.com/s/1uY-UL9KN9cwKiTX5TzIEuw?pwd=jwdp 提取码: jwdp 复制这段内容后打开百度网盘手机App，操作更方便哦`
-        """
+{system}
+请加上分享链接，链接格式随意，例：
+`/bd 链接: https://pan.baidu.com/s/1uY-UL9KN9cwKiTX5TzIEuw?pwd=jwdp 提取码: jwdp 复制这段内容后打开百度网盘手机App，操作更方便哦`
+"""
         return await message.reply(text)
     msg = await message.reply('解析中...', quote=True)
     mid = f'{message.from_user.id}_{msg.id}'
 
-    def extract_link_and_password(_text: str) -> tuple[str, str]:
+    def extract_link_and_password(_text: str) -> Tuple[str, str]:
         formatted_links = re.search(r'(?:/s/|surl=)([\w-]+)', _text)[1]  # 匹配/s/后面的码
         formatted_links = formatted_links if formatted_links.startswith('1') else f'1{formatted_links}'
         password_pattern = r"(?<=\bpwd=)[a-zA-Z0-9]+|[^/](\b[a-zA-Z0-9]{4}\b(?!\.))(?<!link)(?<!https)(?<!surl)"  # 匹配密码
