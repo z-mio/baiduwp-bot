@@ -360,7 +360,7 @@ async def baidu_all_dl(_, query: CallbackQuery):
                                                       caption=f"**获取失败：**\n{e}" if fetch_failed else '',
                                                       reply_to_message_id=query.message.id - 1)
     await query.message.delete()
-    chat_data[f'bd_rlist_{msg.chat.id}_{msg.id}'] = chat_data[f'bd_rlist_{mid}']
+    chat_data[f'bd_rlist_{query.from_user.id}_{msg.id}'] = chat_data[f'bd_rlist_{mid}']
     chat_data.pop(f'bd_rlist_{mid}')
     os.remove(path)
 
