@@ -30,8 +30,8 @@ api_hash = ""  # 在 https://my.telegram.org/apps 获取
 
 bot_token = ""  # 在 https://t.me/BotFather 获取
 
-
-members = []  # 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/getletbot 获取id，不填则为公开使用
+# 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/getletbot 获取id，不填则为公开使用
+members = []
 
 baidu_version = "4"  # 你部署的baiduwp-php版本，填 3 或 4
 
@@ -209,23 +209,20 @@ def build_menu(
     button = button[(page - 1) * PER_PAGE : page * PER_PAGE]
 
     # 添加获取全部按钮
-    if [
-        v
-        for v in root_list.filedata[(page - 1) * PER_PAGE : page * PER_PAGE]
-        if not v.isdir
-    ]:
+    rlf = root_list.filedata[(page - 1) * PER_PAGE : page * PER_PAGE]
+    if [v for v in rlf if not v.isdir]:
         button.insert(0, but_1)
-        if root_list.filedata[:PER_PAGE][10:]:
+        if rlf[10:]:
             button.append(but_1)
     # 翻页按钮
     if root_list.filedata[PER_PAGE:]:
         button.append(tp)
-
+        if rlf[10:]:
+            button.insert(1, tp)
     # 返回上级按钮
     button.insert(0, but)
-    if root_list.filedata[:PER_PAGE][10:]:
+    if rlf[10:]:
         button.append(but)
-        button.insert(1, tp)
 
     return text, button
 
@@ -234,7 +231,10 @@ def build_menu(
 async def turn_page(_, cq: CallbackQuery):
     mid = f"{cq.from_user.id}_{cq.message.id}"
     data = cq.data
-    rl = chat_data[mid].bd_rlist
+    rl = chat_data.get(mid)
+    if not rl:
+        return await cq.answer(text=WARNING_MESSAGE, show_alert=True)
+    rl = rl.bd_rlist
     text, button = build_menu(
         rl,
         mid,
@@ -305,7 +305,7 @@ async def get_or_fetch_dir_list(
 @app.on_callback_query(filters.regex(r"^bd_"))
 async def baidu_list(_, query: CallbackQuery):
     mid = f"{query.from_user.id}_{query.message.id}"
-    pd: ParseData = chat_data.get(mid)
+    pd = chat_data.get(mid)
     if not pd or not pd.bd_rlist:
         return await query.answer(text=WARNING_MESSAGE, show_alert=True)
 
@@ -373,9 +373,10 @@ async def preloading(rlist, dir_list: ParseList, mid):
 @app.on_callback_query(filters.regex(r"^bdf_"))
 async def baidu_file(_, query: CallbackQuery):
     mid = f"{query.from_user.id}_{query.message.id}"
-    rlist: ParseList = chat_data[mid].bd_rlist
+    rlist = chat_data.get(mid)
     if not rlist:
         return await query.answer(text=WARNING_MESSAGE, show_alert=True)
+    rlist = rlist.bd_rlist
     num = query.data.split("_")[1]
     fs_id = rlist.filedata[int(num)].fs_id
 
@@ -413,9 +414,10 @@ User-Agent：`{dir_list.user_agent}`
 @app.on_callback_query(filters.regex(r"^bdAll_dl"))
 async def baidu_all_dl(_, query: CallbackQuery):
     mid = f"{query.from_user.id}_{query.message.id}"
-    rlist: ParseList = chat_data[mid].bd_rlist
+    rlist = chat_data.get(mid)
     if not rlist:
         return await query.answer(text=WARNING_MESSAGE, show_alert=True)
+    rlist = rlist.bd_rlist
     baidu = Baidu(rlist)
     fetch_failed = []
 
@@ -488,7 +490,8 @@ async def baidu_all_dl(_, query: CallbackQuery):
 @app.on_callback_query(filters.regex(r"^bdexit"))
 async def baidu_exit(_, query: CallbackQuery):
     mid = f"{query.from_user.id}_{query.message.id}"
-    if not chat_data[mid].bd_rlist:
+    rl = chat_data.get(mid)
+    if not rl:
         return await query.answer(text=WARNING_MESSAGE, show_alert=True)
     await query.message.edit_text("已退出『百度解析』")
     chat_data.pop(mid)
