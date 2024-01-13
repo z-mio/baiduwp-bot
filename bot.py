@@ -12,6 +12,7 @@ from typing import List, Tuple
 
 import httpx
 from pyrogram import Client, filters
+from pyrogram.errors import MessageNotModified
 from pyrogram.types import (
     BotCommand,
     CallbackQuery,
@@ -23,18 +24,14 @@ from pyrogram.types import (
 #########################################
 # bot
 
-api_id = "1234880"  # 在 https://my.telegram.org/apps 获取
+api_id = ""  # 在 https://my.telegram.org/apps 获取
 
-api_hash = "eda46a85s4fa4a7rgae46aa09adgaa07d"  # 在 https://my.telegram.org/apps 获取
+api_hash = ""  # 在 https://my.telegram.org/apps 获取
 
-bot_token = (
-    "6108379846:AAH2-gYWTo4a89sd4f9azKbbq0"  # 在 https://t.me/BotFather 获取
-)
+bot_token = ""  # 在 https://t.me/BotFather 获取
 
-members = [
-    1444569373,
-    -102301456789,
-]  # 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/getletbot 获取id
+
+members = []  # 允许使用解析的 用户、群组、频道（群组和频道id需要加上-100）可通过 https://t.me/getletbot 获取id，不填则为公开使用
 
 baidu_version = "4"  # 你部署的baiduwp-php版本，填 3 或 4
 
@@ -48,21 +45,16 @@ hostname = ""  # '127.0.0.1'
 port: int = 7890  # 7890
 #########################################
 WARNING_MESSAGE = "这不是你的解析结果哦"
+PER_PAGE = 15  # 每页数量
 
 logging.basicConfig(
     handlers=[logging.StreamHandler(), logging.FileHandler("bot.log")],
     format="%(asctime)s - %(name)s - %(levelname)s: %(message)s",
     level=logging.INFO,
 )
-logging.info('Bot开始运行...')
-baidu_url, baidu_password = baidu_url.rstrip("/"), baidu_password.rstrip("/")
-proxies = (
-    {
-        "all://": f"{scheme}://{hostname}:{port}",
-    }
-    if all([scheme, hostname, port])
-    else None
-)
+logging.info("Bot开始运行...")
+baidu_url = baidu_url.rstrip("/")
+
 app = Client(
     "my_bot",
     bot_token=bot_token,
@@ -151,9 +143,40 @@ class ParseList:
         ]
 
 
+class ParseData:
+    def __init__(self, bd_rlist=None, bd_rlist_root=None, page=None, pre_dir=None):
+        if pre_dir is None:
+            pre_dir = {}
+        if page is None:
+            page = {}
+
+        self.page = page
+        self.bd_rlist = bd_rlist
+        self.bd_rlist_root = bd_rlist_root
+        self.pre_dir = pre_dir
+
+    def get_pre_dir(self, key, default=None):
+        return self.pre_dir.get(key, default)
+
+    def get_page(self, key):
+        return self.page.get(key, 1)
+
+
+def return_dir(root_list: ParseList):
+    return root_list.dirdata.src[-1].fullsrc if root_list.dirdata.src else "/"
+
+
+def return_dir_md5(root_list: ParseList):
+    return md5_hash(return_dir(root_list))
+
+
 # 构建菜单
-def build_menu(root_list: ParseList):
-    text = f"""目录：{f"`{root_list.dirdata.src[-1].fullsrc}`" if root_list.dirdata.src else '`/`'}
+def build_menu(
+    root_list: ParseList,
+    mid: str,
+    page: int = 1,
+):
+    text = f"""目录：{f'`{return_dir(root_list)}`'}
 数量：{root_list.filenum}
 """
     button = [
@@ -165,6 +188,17 @@ def build_menu(root_list: ParseList):
         ]
         for i, v in enumerate(root_list.filedata)
     ]
+
+    page = max(1, min(page, math.ceil(len(button) / PER_PAGE)))
+    chat_data[mid].page[return_dir_md5(root_list)] = page
+
+    tp = [
+        InlineKeyboardButton(text="上一页", callback_data="page_p_p"),
+        InlineKeyboardButton(
+            text=f"{page}/{math.ceil(len(button) / PER_PAGE)}", callback_data="page"
+        ),
+        InlineKeyboardButton(text="下一页", callback_data="page_n_p"),
+    ]
     but = [
         InlineKeyboardButton(text="🔙返回上级", callback_data="bd_rt"),
         InlineKeyboardButton(text="❌关闭菜单", callback_data="bdexit"),
@@ -172,21 +206,49 @@ def build_menu(root_list: ParseList):
     but_1 = [
         InlineKeyboardButton(text="🌐获取本页所有文件下载链接", callback_data="bdAll_dl"),
     ]
-    if [v for v in root_list.filedata if not v.isdir]:
-        button.insert(0, but_1)
-        if root_list.filedata[7:]:
-            button.append(but_1)
+    button = button[(page - 1) * PER_PAGE : page * PER_PAGE]
 
+    # 添加获取全部按钮
+    if [
+        v
+        for v in root_list.filedata[(page - 1) * PER_PAGE : page * PER_PAGE]
+        if not v.isdir
+    ]:
+        button.insert(0, but_1)
+        if root_list.filedata[:PER_PAGE][10:]:
+            button.append(but_1)
+    # 翻页按钮
+    if root_list.filedata[PER_PAGE:]:
+        button.append(tp)
+
+    # 返回上级按钮
     button.insert(0, but)
-    if root_list.filedata[7:]:
+    if root_list.filedata[:PER_PAGE][10:]:
         button.append(but)
+        button.insert(1, tp)
 
     return text, button
 
 
+@app.on_callback_query(filters.regex("^page_"))
+async def turn_page(_, cq: CallbackQuery):
+    mid = f"{cq.from_user.id}_{cq.message.id}"
+    data = cq.data
+    rl = chat_data[mid].bd_rlist
+    text, button = build_menu(
+        rl,
+        mid,
+        chat_data[mid].get_page(return_dir_md5(rl)) + (-1 if data == "page_p_p" else 1),
+    )
+    try:
+        await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(button))
+    except MessageNotModified:
+        ...
+
+
 @app.on_message(filters.command("bd"))
 async def baidu_jx(_, message: Message):
-    if message.chat.id not in members:
+    if members and message.chat.id not in members:
         return
     parameter = " ".join(message.command[1:])
     parameter = parameter or (
@@ -222,60 +284,67 @@ async def baidu_jx(_, message: Message):
         root_list = await baidu.parse_list(surl, pwd)
         if root_list.error:
             return await msg.edit_text(root_list.error_msg)
-        chat_data[f"bd_rlist_{mid}"] = root_list
-        chat_data[f"bd_rlist_{mid}_root"] = root_list
+        chat_data[mid] = ParseData(bd_rlist=root_list, bd_rlist_root=root_list)
 
-        text, button = build_menu(root_list)
+        text, button = build_menu(root_list, mid)
         await msg.edit_text(text, reply_markup=InlineKeyboardMarkup(button))
     except Exception as e:
         await msg.edit_text(f"错误：{e}")
 
 
+async def get_or_fetch_dir_list(
+    parse_data: ParseData, baidu_instance, dir_hash: str, surl: str, pwd: str, dir_=None
+):
+    dir_list = parse_data.pre_dir.get(dir_hash)
+    if not dir_list:
+        dir_list = await baidu_instance.parse_list(surl=surl, pwd=pwd, dir_=dir_)
+        parse_data.pre_dir[dir_hash] = dir_list
+    return dir_list
+
+
 @app.on_callback_query(filters.regex(r"^bd_"))
 async def baidu_list(_, query: CallbackQuery):
     mid = f"{query.from_user.id}_{query.message.id}"
-    rlist: ParseList = chat_data.get(f"bd_rlist_{mid}")
-    if not rlist:
+    pd: ParseData = chat_data.get(mid)
+    if not pd or not pd.bd_rlist:
         return await query.answer(text=WARNING_MESSAGE, show_alert=True)
-    baidu = Baidu(rlist)
 
-    num = query.data.split("_")[1]
+    baidu = Baidu(pd.bd_rlist)
+    rlist: ParseList = pd.bd_rlist
     surl = rlist.dirdata.surl
     pwd = rlist.dirdata.pwd
 
+    dir_list = None
     _dir = None
-    # 普通返回，如果目录为一级目录，就返回根目录，否则返回上一层目录
+
+    # 根据callback数据决定动作
     if query.data == "bd_rt":
         if len(rlist.dirdata.src) == 1:
-            dir_list = chat_data.get(f"bd_rlist_{mid}_root") or await baidu.parse_list(
-                surl=surl, pwd=pwd
-            )
+            dir_list = pd.bd_rlist_root or await baidu.parse_list(surl=surl, pwd=pwd)
         else:
             _dir = rlist.dirdata.src[-2].fullsrc
-            dir_list = chat_data.get(
-                f"bd_rlist_{mid}_{md5_hash(_dir)}"
-            ) or await baidu.parse_list(dir_=_dir)
-    # 下载返回，返回当前目录
+
     elif query.data == "bd_dl_rt":
         if rlist.dirdata.src:
             _dir = rlist.dirdata.src[-1].fullsrc
-            dir_list = chat_data.get(
-                f"bd_rlist_{mid}_{md5_hash(_dir)}"
-            ) or await baidu.parse_list(dir_=_dir)
         else:
-            dir_list = chat_data.get(f"bd_rlist_{mid}_root") or await baidu.parse_list(
-                surl=surl, pwd=pwd
-            )
-    else:
-        _dir = rlist.filedata[int(num)].path
-        dir_list = chat_data.get(
-            f"bd_rlist_{mid}_{md5_hash(_dir)}"
-        ) or await baidu.parse_list(dir_=_dir)
-    if _dir:
-        chat_data[f"bd_rlist_{mid}_{md5_hash(_dir)}"] = dir_list
-    chat_data[f"bd_rlist_{mid}"] = dir_list
+            dir_list = pd.bd_rlist_root or await baidu.parse_list(surl=surl, pwd=pwd)
 
-    text, button = build_menu(dir_list)
+    else:
+        num = int(query.data.split("_")[1])
+        _dir = rlist.filedata[num].path
+
+    if _dir:
+        dir_hash = md5_hash(_dir)
+        dir_list = await get_or_fetch_dir_list(
+            pd, baidu, dir_hash, surl, pwd, dir_=_dir
+        )
+
+    # 更新当前目录列表
+    pd.bd_rlist = dir_list
+
+    # 构建响应
+    text, button = build_menu(dir_list, mid, pd.get_page(return_dir_md5(dir_list)))
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(button))
     await preloading(rlist, dir_list, mid)
 
@@ -287,14 +356,14 @@ async def preloading(rlist, dir_list: ParseList, mid):
     async def load(dir_):
         try:
             dir_list = await baidu.parse_list(dir_=dir_)
-            chat_data[f"bd_rlist_{mid}_{md5_hash(dir_)}"] = dir_list
+            chat_data[mid].pre_dir[md5_hash(dir_)] = dir_list
         except Exception as ee:
             logging.error(ee)
 
     d_l = [
         i.path
         for i in dir_list.filedata
-        if i.isdir and not chat_data.get(f"bd_rlist_{mid}_{md5_hash(i.path)}")
+        if i.isdir and not chat_data[mid].get_pre_dir(md5_hash(i.path))
     ]
     if not d_l[20:]:
         task = [load(v) for v in d_l]
@@ -304,7 +373,7 @@ async def preloading(rlist, dir_list: ParseList, mid):
 @app.on_callback_query(filters.regex(r"^bdf_"))
 async def baidu_file(_, query: CallbackQuery):
     mid = f"{query.from_user.id}_{query.message.id}"
-    rlist: ParseList = chat_data.get(f"bd_rlist_{mid}")
+    rlist: ParseList = chat_data[mid].bd_rlist
     if not rlist:
         return await query.answer(text=WARNING_MESSAGE, show_alert=True)
     num = query.data.split("_")[1]
@@ -344,7 +413,7 @@ User-Agent：`{dir_list.user_agent}`
 @app.on_callback_query(filters.regex(r"^bdAll_dl"))
 async def baidu_all_dl(_, query: CallbackQuery):
     mid = f"{query.from_user.id}_{query.message.id}"
-    rlist: ParseList = chat_data.get(f"bd_rlist_{mid}")
+    rlist: ParseList = chat_data[mid].bd_rlist
     if not rlist:
         return await query.answer(text=WARNING_MESSAGE, show_alert=True)
     baidu = Baidu(rlist)
@@ -361,7 +430,12 @@ async def baidu_all_dl(_, query: CallbackQuery):
 
     dirname = rlist.dirdata.src[-1].dirname if rlist.dirdata.src else "根目录"
     await query.message.edit_text(f"{dirname}|获取中...")
-    a = [v for v in rlist.filedata if not v.isdir]
+    page = chat_data[mid].get_page(return_dir_md5(rlist))
+    a = [
+        v
+        for v in rlist.filedata[(page - 1) * PER_PAGE : page * PER_PAGE]
+        if not v.isdir
+    ]
     task = [add_dl(v) for v in a]
     results = await asyncio.gather(*task)
 
@@ -406,18 +480,18 @@ async def baidu_all_dl(_, query: CallbackQuery):
         reply_to_message_id=query.message.id - 1,
     )
     await query.message.delete()
-    chat_data[f"bd_rlist_{query.from_user.id}_{msg.id}"] = chat_data[f"bd_rlist_{mid}"]
-    chat_data.pop(f"bd_rlist_{mid}")
+    chat_data[f"{query.from_user.id}_{msg.id}"] = chat_data[mid]
+    chat_data.pop(mid)
     os.remove(path)
 
 
 @app.on_callback_query(filters.regex(r"^bdexit"))
 async def baidu_exit(_, query: CallbackQuery):
     mid = f"{query.from_user.id}_{query.message.id}"
-    if chat_data.get(f"bd_rlist_{mid}"):
-        await query.message.edit_text("已退出『百度解析』")
-    else:
+    if not chat_data[mid].bd_rlist:
         return await query.answer(text=WARNING_MESSAGE, show_alert=True)
+    await query.message.edit_text("已退出『百度解析』")
+    chat_data.pop(mid)
 
 
 ###########################################################################
@@ -518,7 +592,7 @@ class Baidu:
     @staticmethod
     @retry()
     async def parse_count() -> str:
-        async with httpx.AsyncClient(proxies=proxies) as client:
+        async with httpx.AsyncClient() as client:
             result = await client.get(f"{baidu_url}/api.php?m=ParseCount")
             result = result.json()["msg"].replace("<br />", "\n")
             return result
@@ -527,7 +601,7 @@ class Baidu:
     @staticmethod
     @retry()
     async def last_parse() -> str:
-        async with httpx.AsyncClient(proxies=proxies) as client:
+        async with httpx.AsyncClient() as client:
             result = await client.get(f"{baidu_url}/api.php?m=LastParse")
             result = result.json()["msg"].replace("<br />", "\n")
             return result
@@ -536,7 +610,7 @@ class Baidu:
     @staticmethod
     @retry()
     async def get_system() -> System:
-        async with httpx.AsyncClient(proxies=proxies) as client:
+        async with httpx.AsyncClient() as client:
             result = await client.get(f"{baidu_url}/system")
             result = result.json()
 
@@ -574,8 +648,8 @@ SVIP账号状态
     @staticmethod
     @retry()
     async def get_root_list(
-            surl: str,
-            pwd: str,
+        surl: str,
+        pwd: str,
     ) -> ParseList:
         """
 
@@ -589,7 +663,7 @@ SVIP账号状态
             "password": baidu_password,
         }
 
-        async with httpx.AsyncClient(proxies=proxies) as client:
+        async with httpx.AsyncClient() as client:
             result = await client.post(f"{baidu_url}/api.php?m=GetList", data=data)
         return ParseList(result.json())
 
@@ -597,10 +671,10 @@ SVIP账号状态
 
     @retry()
     async def get_list(
-            self,
-            surl: str = None,
-            pwd: str = None,
-            dir_: str = None,
+        self,
+        surl: str = None,
+        pwd: str = None,
+        dir_: str = None,
     ) -> ParseList:
         """
 
@@ -622,7 +696,7 @@ SVIP账号状态
             "password": baidu_password,
         }
 
-        async with httpx.AsyncClient(proxies=proxies) as client:
+        async with httpx.AsyncClient() as client:
             api = "/api.php?m=GetList" if baidu_version == "3" else "/parse/list"
             result = await client.post(f"{baidu_url}{api}", data=data)
             result = ParseList(result.json())
@@ -636,10 +710,10 @@ SVIP账号状态
             return result
 
     async def parse_list(
-            self,
-            surl: str = None,
-            pwd: str = None,
-            dir_: str = None,
+        self,
+        surl: str = None,
+        pwd: str = None,
+        dir_: str = None,
     ) -> ParseList:
         """
         :param surl:
@@ -672,14 +746,14 @@ SVIP账号状态
             "uk": self.B.uk,
             "password": baidu_password,
         }
-        async with httpx.AsyncClient(proxies=proxies) as client:
+        async with httpx.AsyncClient() as client:
             api = "/api.php?m=Download" if baidu_version == "3" else "/parse/link"
             result = await client.post(f"{baidu_url}{api}", data=data)
             return DlUrl(result.json())
 
 
 if __name__ == "__main__":
-    chat_data = {}
+    chat_data: dict[str, ParseData] = {}
     formats = {
         ".txt": "📄",
         ".docx": "📝",
